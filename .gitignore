@@ -1,0 +1,9 @@
+# Ignore SQLite database files
+*.db
+# Python bytecode
+__pycache__/
+*.pyc
+# Virtual environment
+venv/
+# IDE files (VSCode)
+.vscode/
