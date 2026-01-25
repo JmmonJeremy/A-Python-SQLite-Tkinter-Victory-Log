@@ -9,12 +9,54 @@
 """CODE to IMPORT libraries used"""
 import sqlite3
 from datetime import date, datetime
+# import re for regex expression check
+import re
 # import colorama to allow different colors for the hello text
 import colorama
 # import the functions to be used from colorama
 from colorama import Fore, Back, Style
 
 """CODE for resusable FUNCTIONS"""
+# Prompts for & returns a valid date input
+def validate_date(prompt: str, allow_default=True) -> str:
+  today_date = date.today()
+  today_str = date.today().isoformat()
+  while True:
+    suffix = f" [{today_str}]" if allow_default else ""
+    entered_date = input(f"{prompt}{suffix}: ").strip()
+    # Allow default (press Enter)
+    if entered_date == "" and allow_default:
+      return today_str
+    # Format check: YYYY-MM-DD
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", entered_date):
+      print("ERROR! Date must be in YYYY-MM-DD format (YYYY-MM-DD), please try again.")
+      continue
+    # Logical date check
+    try:
+      date_obj = datetime.strptime(entered_date, "%Y-%m-%d").date()
+    except ValueError:
+      print("ERROR! That is not a valid calendar date, please try again.")
+      continue
+    # Year constraint
+    if date_obj.year < 2026:
+      print("ERROR! Date cannot be before the year 2026, please try again.")
+      continue
+    # Future date check
+    if date_obj > today_date:
+      print("ERROR! Date cannot be after today, please try again.")
+      continue
+    # Passed all checks
+    return date_obj.isoformat()
+
+# Checks to make sure the 2nd date is after the first for a date range
+def validate_end_date(prompt: str, start_date: str, allow_default=True) -> str:
+  while True:
+    entered_date = validate_date(prompt, allow_default=allow_default)
+    if entered_date < start_date:
+      print(f"ERROR! End date [{entered_date}] cannot be before the start date [{start_date}]. Please try again.")
+      continue
+    return entered_date
+    
 # Returns the week number of the month using the majority-of-days rule.
 def get_week_number(date_obj: datetime) -> int:
     """    
@@ -38,7 +80,7 @@ def show_victories(cursor, where_clause="", values=(), error_statement="", order
   cursor.execute(f"SELECT v.victory FROM victories v {where_clause}", values)
   result = cursor.fetchone()
   if result is None:
-    print(f"\nERROR! {error_statement}, please try again.") 
+    print(f"\nERROR! {error_statement} please try again.") 
     return  
   cursor.execute(f"""
                   SELECT 
@@ -149,27 +191,25 @@ while choice != 7:
     # Have user enter their victory
     victory = input("Record your personal victory: ")
     # Have user enter a different date or use today's date
-    today = date.today().isoformat() # 4 digit year - 2 digit month - 2 digit day
-    entered_date = input(f"Enter date or press enter for default [{today}]: ")
-    date_str = entered_date if entered_date else today
+    entered_date = validate_date(f"Enter date YYYY-MM-DD or press enter for the default of today's date")
     # Compute the week_number the victory falls into
-    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    date_obj = datetime.strptime(entered_date, "%Y-%m-%d")
     week_number = get_week_number(date_obj)
     # Find and insert then correct number for the victory
     cursor.execute("""
                     SELECT COALESCE(MAX(number), 0) + 1
                     FROM victories
                     WHERE v_date = ?
-                  """, (date_str,))
+                  """, (entered_date,))
     number = cursor.fetchone()[0]  
     # Make tuplet to insert victory into victories database
-    values = (victory, number, date_str, week_number)
+    values = (victory, number, entered_date, week_number)
     cursor.execute("INSERT INTO victories (victory, number, v_date, week_number) VALUES (?, ?, ?, ?)", values)
     connection.commit()
-    print(f"\nVictory number [{number}] on [{date_str}] of [{victory}] was successfully added to your log!")
+    print(f"\nVictory number [{number}] on [{entered_date}] of [{victory}] was successfully added to your log!")
   # CODE to UPDATE or edit a victory
   elif choice == 2: #UPDATE########################################################################################
-    e_date = input("Enter the date of the victory to be edited: ")
+    e_date = validate_date("Enter the date YYYY-MM-DD of the victory to be edited or press enter for the default of today's date")
     e_number = int(input("Enter the number of the victory to be edited: "))
     values = (e_date, e_number)
     cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
@@ -189,7 +229,7 @@ while choice != 7:
       print(f"\nThere was no change made to victory number [{e_number}] on [{e_date}] of [{e_victory}].")
   # CODE to DELETE a victory
   elif choice == 3: #DELETE##########################################################################################
-    d_date = input("Enter the date of the victory to be removed: ")
+    d_date = validate_date("Enter the date YYYY-MM-DD of the victory to be removed or press enter for the default of today's date")
     d_number = int(input("Enter the number of the victory to be removed: "))
     values = (d_date, d_number)
     cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
@@ -197,11 +237,15 @@ while choice != 7:
     if result is None:
       print(f"\nERROR! The date [{d_date}] and number [{d_number}] do not correspond to an existing victory.") 
       continue
-    else:
-      d_victory = result[0]
-      cursor.execute("DELETE FROM victories WHERE v_date = ? AND number = ?", values)
-      connection.commit()    
-      print(f"\nVictory [{d_number}] on [{d_date}] of [{d_victory}] was successfully deleted")
+    d_victory = result[0]
+    # Ask for confirmation before deleting
+    confirm = input(f"\nAre you sure you want to delete victory [{d_number}] on [{d_date}] of [{d_victory}]? (y/n): ").strip().lower()
+    if confirm != 'y':
+      print("Deletion canceled.")
+      continue
+    cursor.execute("DELETE FROM victories WHERE v_date = ? AND number = ?", values)
+    connection.commit()    
+    print(f"\nVictory [{d_number}] on [{d_date}] of [{d_victory}] was successfully deleted")
   # CODE to SELECT & show ALL victories
   elif choice == 4: #SELECT###########################################################################################
     order_clause = "ORDER BY v.v_date, v.number"
@@ -216,7 +260,7 @@ while choice != 7:
     selection = int(input("   ->  "))
     print("      ‾‾‾")
     if selection == 1:#SINGLE VICTORY#################################################################################
-      s_date = input("Enter the date of the victory you want to see: ")
+      s_date = validate_date("Enter the date YYYY-MM-DD of the victory you want to see or press enter for the default of today's date")
       s_number = int(input("Enter the number of the victory you want to see: "))
       where_clause = "WHERE v.v_date = ? AND v.number = ?"
       values = (s_date, s_number)
@@ -224,7 +268,7 @@ while choice != 7:
       print() # Add empty line before output
       show_victories(cursor, where_clause, values, error_statement)      
     if selection == 2:#DAY'S VICTORIES################################################################################
-      sd_date = input("Enter the date of the victories you want to see: ")     
+      sd_date = validate_date("Enter the date YYYY-MM-DD of the victories you want to see or press enter for the default of today's date")     
       where_clause = "WHERE v.v_date = ?"
       value = (sd_date,)
       error_statement = f"The date [{sd_date}] does not correspond to any existing victories,"
@@ -232,8 +276,8 @@ while choice != 7:
       print() # Add empty line before output
       show_victories(cursor, where_clause, value, error_statement, order_clause)
     if selection == 3:#RANGE OF VICTORIES#############################################################################
-      begin_date = input("Enter the starting date of the victories you want to see: ")
-      end_date = input("Enter the ending date for the victories you want to see: ")
+      begin_date = validate_date("Enter the starting date YYYY-MM-DD of the victories you want to see", allow_default=False)
+      end_date = validate_end_date("Enter the ending date YYYY-MM-DD for the victories you want to see or press enter for the default of today's date", begin_date)
       where_clause = "WHERE v.v_date >= ? AND v.v_date <= ?"
       values = (begin_date, end_date)
       error_statement = f"There are no existing victories in the date range of [{begin_date} - {end_date}],"
@@ -247,22 +291,22 @@ while choice != 7:
     print("   3) Show the lowest, highest, and average victory count for a range of dates")    
     option = int(input("   ->  "))    
     if option == 1:#COUNT FOR DAY##################################################################################
-      ct_date = input("Enter the date you want to see a victory total for: ")
+      ct_date = validate_date("Enter the date YYYY-MM-DD you want to see a victory total for or press enter for the default of today's date")
       cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date = ?", (ct_date,))
       victory_tot = cursor.fetchone()[0]
       print() # Add empty line before output
       print(Fore.MAGENTA + f"{ct_date} Total Victory Count: " + Fore.YELLOW + f"\033[4m {victory_tot} \033[0m" + Style.RESET_ALL)
     if option == 2:#COUNT FOR RANGE##################################################################################
-      begin_ct_date = input("Enter the start date for the time period you want to see a victory total for: ")
-      end_ct_date = input("Enter the end date for the time period you want to see a victory total for: ")
+      begin_ct_date = validate_date("Enter the start date YYYY-MM-DD for the time period you want to see a victory total for", allow_default=False)
+      end_ct_date = validate_end_date("Enter the end date YYYY-MM-DD for the time period you want to see a victory total for or press enter for the default of today's date", begin_ct_date)
       values = (begin_ct_date, end_ct_date)
       cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date BETWEEN ? AND ?", values)
       victory_tot = cursor.fetchone()[0]
       print() # Add empty line before output
       print(Fore.MAGENTA + f"{begin_ct_date} to {end_ct_date} Total Victory Count: " + Fore.YELLOW + f"\033[4m {victory_tot} \033[0m" + Style.RESET_ALL)
     if option == 3:#MIN, MAX, AVG FOR RANGE##################################################################################
-      begin_calc_date = input("Enter the start date for the time period you want to see a victory low, high, & average for: ")
-      end_calc_date = input("Enter the end date for the time period you want to see a victory low, high, & average for: ")
+      begin_calc_date = validate_date("Enter the start date YYYY-MM-DD for the time period you want to see a victory low, high, & average for", allow_default=False)
+      end_calc_date = validate_end_date("Enter the end date YYYY-MM-DD for the time period you want to see a victory low, high, & average for or press enter for the default of today's date", begin_calc_date)
       values = (begin_calc_date, end_calc_date)
       cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date BETWEEN ? AND ?", values)
       victory_low = cursor.fetchone()[0]
