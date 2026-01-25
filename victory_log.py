@@ -9,6 +9,10 @@
 """CODE to IMPORT libraries used"""
 import sqlite3
 from datetime import date, datetime
+# import colorama to allow different colors for the hello text
+import colorama
+# import the functions to be used from colorama
+from colorama import Fore, Back, Style
 
 """CODE for resusable FUNCTIONS"""
 # Returns the week number of the month using the majority-of-days rule.
@@ -28,6 +32,38 @@ def get_week_number(date_obj: datetime) -> int:
     adjusted_day = (date_obj.day - 1) + first_weekday
     week_number = (adjusted_day // 7) + 1 - week1_offset # add 1 to start 0 based week at 1
     return week_number
+
+# Displays the requested victories
+def show_victories(cursor, where_clause="", values=(), error_statement="", order_clause=""):
+  cursor.execute(f"SELECT v.victory FROM victories v {where_clause}", values)
+  result = cursor.fetchone()
+  if result is None:
+    print(f"\nERROR! {error_statement}, please try again.") 
+    return  
+  cursor.execute(f"""
+                  SELECT 
+                    v.v_date,
+                    m.month,
+                    d.full_day,
+                    w.week_of_month,
+                    v.number,
+                    v.victory
+                  FROM victories v
+                  LEFT JOIN time_labels d
+                    ON d.day_number = CAST(strftime('%w', v.v_date) AS INTEGER)
+                  LEFT JOIN time_labels m
+                    ON m.month_number = CAST(strftime('%m', v.v_date) AS INTEGER)
+                  LEFT JOIN time_labels w
+                    ON w.week_number = v.week_number                        
+                  {where_clause}
+                  {order_clause}
+                """, values) 
+  for line in cursor.fetchall():
+    # Unpack the tuple into separate variables instead of using indexing like line[0]
+    date_str, month, day, week_of_month, number, victory = line
+    # Build the composite column for the (month - week # - day) section
+    date_info = f"({month} - {week_of_month} - {day})"      
+    print(f"{date_str:<11} {date_info:<58} Victory {number:<2} {victory}")
 
 """CODE to CREATE & CONNECT to DATABASE"""
 connection = sqlite3.connect("victory.db") # creates if doesn't exist & connects
@@ -57,7 +93,7 @@ day_data = [('Sun', 'Sunday', 0),
  ('Fri', 'Friday', 5),
  ('Sat', 'Saturday', 6)]
 # Pair week_of_month with week_number for columns to correspond for joins using the date & a formula
-week_data = [(1, 'Week 1'), (2, 'Week 2'), (3, 'Week 3'), (4, 'Week 4'), (5, 'Week 5')]
+week_data = [(0, "Part of Previous Month's Last Week"), (1, 'Week 1'), (2, 'Week 2'), (3, 'Week 3'), (4, 'Week 4'), (5, 'Week 5')]
 # Pair month names with numbers for joins - results in [('January', 1), ('February', 2), etc.] *number & name correspond in table
 month_data = list(zip(
   ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
@@ -95,14 +131,15 @@ cursor.execute("""
 """CODE to CREATE the USER INTERFACE"""
 # Create a menu with database operations - victories: #1 id, #2 victory, #3 number, #4 date
 choice = None #INTERFACE#####################################################################################
-while choice != 6:
+while choice != 7:
   print("\nSelect an option:")
   print("1) Add a new victory")
   print("2) Edit a victory")
   print("3) Delete a victory")
   print("4) Show all victories")
   print("5) Show selected victory or victories")
-  print("6) Exit")
+  print("6) Look up statistics")
+  print("7) Exit")
   choice = int(input("->  "))
   print("   ‾‾‾")
 
@@ -118,48 +155,38 @@ while choice != 6:
     # Compute the week_number the victory falls into
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     week_number = get_week_number(date_obj)
-    # Have user enter a different date or use today's date
+    # Find and insert then correct number for the victory
     cursor.execute("""
                     SELECT COALESCE(MAX(number), 0) + 1
                     FROM victories
                     WHERE v_date = ?
                   """, (date_str,))
-    default_number = cursor.fetchone()[0]
-    entered_number = input(f"Enter victory number or press enter for ordered number default [{default_number}]:")
-    number = int(entered_number) if entered_number else default_number    
+    number = cursor.fetchone()[0]  
     # Make tuplet to insert victory into victories database
     values = (victory, number, date_str, week_number)
     cursor.execute("INSERT INTO victories (victory, number, v_date, week_number) VALUES (?, ?, ?, ?)", values)
     connection.commit()
-    print(f"\nVictory number [{number}] on [{today}] of [{victory}] was successfully added to your log!")
+    print(f"\nVictory number [{number}] on [{date_str}] of [{victory}] was successfully added to your log!")
   # CODE to UPDATE or edit a victory
   elif choice == 2: #UPDATE########################################################################################
     e_date = input("Enter the date of the victory to be edited: ")
-    e_number = input("Enter the number of the victory to be edited: ")
-    values = (e_date, int(e_number))
+    e_number = int(input("Enter the number of the victory to be edited: "))
+    values = (e_date, e_number)
     cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
-    result = cursor.fetchone()
-    e_victory = result[0] if result else None
-    updated_number = input(f"Enter updated victory number or press enter for it to remain as [{e_number}]:")
-    updated_number = updated_number if updated_number else e_number
-    updated_victory = input(f"Enter updated victory or press enter for it to remain as [{e_victory}]:")
-    updated_victory = updated_victory if updated_victory else e_victory
-    updated_values = (int(updated_number), updated_victory, e_date, int(e_number))
+    result = cursor.fetchone() 
     if result is None:
       print(f"\nERROR! The date [{e_date}] and number [{e_number}]  do not correspond to a victory, please try again.")
-      continue 
-    elif e_number != updated_number and e_victory != updated_victory:
-      cursor.execute("UPDATE victories SET number = ?, victory = ? WHERE v_date = ? AND number = ?", updated_values)
+      continue  
+    e_victory = result[0]  
+    updated_victory = input(f"Enter updated victory or press enter for it to remain as [{e_victory}]:")
+    updated_victory = updated_victory if updated_victory else e_victory
+    updated_values = (updated_victory, e_date, e_number)    
+    if e_victory != updated_victory:
+      cursor.execute("UPDATE victories SET victory = ? WHERE v_date = ? AND number = ?", updated_values)
       connection.commit()
-      print(f"\nVictory number [{e_number}] on [{e_date}] of [{e_victory}] was successfully changed to #[{updated_number}] [{updated_victory}]!")
-    elif e_number != updated_number and e_victory == updated_victory:
-      cursor.execute("UPDATE victories SET number = ? WHERE v_date = ? AND number = ?", [int(updated_number), e_date, int(e_number)])
-      connection.commit()
-      print(f"\nVictory number [{e_number}] on [{e_date}] of [{e_victory}] was successfully changed to number [{updated_number}]!")
-    elif e_number == updated_number and e_victory != updated_victory:
-      cursor.execute("UPDATE victories SET victory = ? WHERE v_date = ? AND number = ?", (updated_victory, e_date, int(e_number)))
-      connection.commit()
-      print(f"\nVictory number [{e_number}] on [{e_date}] of [{e_victory}] was successfully changed to [{updated_victory}]!")
+      print(f"\nVictory number [{e_number}] on [{e_date}] of [{e_victory}] was successfully changed to [{updated_victory}].")
+    else:
+      print(f"\nThere was no change made to victory number [{e_number}] on [{e_date}] of [{e_victory}].")
   # CODE to DELETE a victory
   elif choice == 3: #DELETE##########################################################################################
     d_date = input("Enter the date of the victory to be removed: ")
@@ -177,136 +204,86 @@ while choice != 6:
       print(f"\nVictory [{d_number}] on [{d_date}] of [{d_victory}] was successfully deleted")
   # CODE to SELECT & show ALL victories
   elif choice == 4: #SELECT###########################################################################################
-    cursor.execute("""
-                    SELECT 
-                      v.v_date,
-                      m.month,
-                      d.full_day,
-                      w.week_of_month,
-                      v.number,
-                      v.victory
-                    FROM victories v
-                    LEFT JOIN time_labels d
-                      ON d.day_number = CAST(strftime('%w', v.v_date) AS INTEGER)
-                    LEFT JOIN time_labels m
-                      ON m.month_number = CAST(strftime('%m', v.v_date) AS INTEGER)
-                    LEFT JOIN time_labels w
-                      ON w.week_number = v.week_number
-                    ORDER BY v.v_date, v.number
-                  """)
-    print()
-    for line in cursor.fetchall():
-      # Unpack the tuple into separate variables instead of using indexing like line[0]
-      date_str, month, day, week_of_month, number, victory = line
-      # Build the composite column for the (month - week # - day) section
-      date_info = f"({month} - {week_of_month} - {day})"      
-      print(f"{date_str:<12} {date_info:<30}  {number:<3}  {victory}")
-  # CODE to SELECT & show ALL victories
+    order_clause = "ORDER BY v.v_date, v.number"
+    error_statement = "No victories exist to be displayed. First, record some victories, and then"
+    show_victories(cursor, order_clause=order_clause, error_statement=error_statement)   
+  # CODE to SELECT & specific victories
   elif choice == 5: #SELECT###########################################################################################
-    print("\tSelect what you want to see:")
-    print("\t1) Show a single victory")
-    print("\t2) Show all victories for a day")
-    print("\t3) Show all victories for a range of dates")
-    selection = int(input("\t->  "))
-    print("\t   ‾‾‾")
+    print("   Select what you want to see:")
+    print("   1) Show a single victory")
+    print("   2) Show all victories for a day")
+    print("   3) Show all victories for a range of dates")
+    selection = int(input("   ->  "))
+    print("      ‾‾‾")
     if selection == 1:#SINGLE VICTORY#################################################################################
       s_date = input("Enter the date of the victory you want to see: ")
       s_number = int(input("Enter the number of the victory you want to see: "))
+      where_clause = "WHERE v.v_date = ? AND v.number = ?"
       values = (s_date, s_number)
-      cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
-      result = cursor.fetchone()
-      if result is None:
-        print(f"\nERROR! The date [{s_date}] and number [{s_number}] do not correspond to an existing victory, please try again.") 
-        continue
-      else:
-        cursor.execute("""
-                        SELECT 
-                          v.v_date,
-                          m.month,
-                          d.full_day,
-                          w.week_of_month,
-                          v.number,
-                          v.victory
-                        FROM victories v
-                        LEFT JOIN time_labels d
-                          ON d.day_number = CAST(strftime('%w', v.v_date) AS INTEGER)
-                        LEFT JOIN time_labels m
-                          ON m.month_number = CAST(strftime('%m', v.v_date) AS INTEGER)
-                        LEFT JOIN time_labels w
-                          ON w.week_number = v.week_number                        
-                        WHERE v.v_date = ? AND v.number = ?
-                      """, values)
-        print()
-        for line in cursor.fetchall():
-          # Unpack the tuple into separate variables instead of using indexing like line[0]
-          date_str, month, day, week_of_month, number, victory = line
-          # Build the composite column for the (month - week # - day) section
-          date_info = f"({month} - {week_of_month} - {day})"      
-          print(f"{date_str:<12} {date_info:<30}  {number:<3}  {victory}")
-    if selection == 2:#DAY'S VICTORIES#################################################################################
-      sd_date = input("Enter the date of the victories you want to see: ")
-      cursor.execute("SELECT victory FROM victories WHERE v_date = ?", (sd_date,))
-      result = cursor.fetchone()
-      if result is None:
-        print(f"\nERROR! The date [{sd_date}] does not correspond to any existing victories, please try again.") 
-        continue      
-      cursor.execute("""
-                      SELECT 
-                        v.v_date,
-                        m.month,
-                        d.full_day,
-                        w.week_of_month,
-                        v.number,
-                        v.victory
-                      FROM victories v
-                      LEFT JOIN time_labels d
-                        ON d.day_number = CAST(strftime('%w', v.v_date) AS INTEGER)
-                      LEFT JOIN time_labels m
-                        ON m.month_number = CAST(strftime('%m', v.v_date) AS INTEGER)
-                      LEFT JOIN time_labels w
-                        ON w.week_number = v.week_number                        
-                      WHERE v.v_date = ?
-                    """, (sd_date,))
-      print()
-      for line in cursor.fetchall():
-        # Unpack the tuple into separate variables instead of using indexing like line[0]
-        date_str, month, day, week_of_month, number, victory = line
-        # Build the composite column for the (month - week # - day) section
-        date_info = f"({month} - {week_of_month} - {day})"      
-        print(f"{date_str:<12} {date_info:<30}  {number:<3}  {victory}")
-    if selection == 3:#RANGE OF VICTORIES#################################################################################
+      error_statement = f"The date [{s_date}] and number [{s_number}] do not correspond to an existing victory,"
+      print() # Add empty line before output
+      show_victories(cursor, where_clause, values, error_statement)      
+    if selection == 2:#DAY'S VICTORIES################################################################################
+      sd_date = input("Enter the date of the victories you want to see: ")     
+      where_clause = "WHERE v.v_date = ?"
+      value = (sd_date,)
+      error_statement = f"The date [{sd_date}] does not correspond to any existing victories,"
+      order_clause = "ORDER BY v.number"
+      print() # Add empty line before output
+      show_victories(cursor, where_clause, value, error_statement, order_clause)
+    if selection == 3:#RANGE OF VICTORIES#############################################################################
       begin_date = input("Enter the starting date of the victories you want to see: ")
       end_date = input("Enter the ending date for the victories you want to see: ")
+      where_clause = "WHERE v.v_date >= ? AND v.v_date <= ?"
       values = (begin_date, end_date)
-      cursor.execute("SELECT victory FROM victories WHERE v_date >= ? AND v_date <= ?", values)
-      result = cursor.fetchone()
-      if result is None:
-        print(f"\nERROR! There are not existing victories in the date range of [{begin_date} - {end_date}], please try again.") 
-        continue
+      error_statement = f"There are no existing victories in the date range of [{begin_date} - {end_date}],"
+      order_clause = "ORDER BY v.v_date, v.number"
+      print() # Add empty line before output
+      show_victories(cursor, where_clause, values, error_statement, order_clause) 
+  elif choice == 6: #AGGREGATE########################################################################################
+    print("   Select what you want to see:")
+    print("   1) Show total victory count for a day")
+    print("   2) Show total victory count for a week, month, etc")
+    print("   3) Show the lowest, highest, and average victory count for a range of dates")    
+    option = int(input("   ->  "))    
+    if option == 1:#COUNT FOR DAY##################################################################################
+      ct_date = input("Enter the date you want to see a victory total for: ")
+      cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date = ?", (ct_date,))
+      victory_tot = cursor.fetchone()[0]
+      print() # Add empty line before output
+      print(Fore.MAGENTA + f"{ct_date} Total Victory Count: " + Fore.YELLOW + f"\033[4m {victory_tot} \033[0m" + Style.RESET_ALL)
+    if option == 2:#COUNT FOR RANGE##################################################################################
+      begin_ct_date = input("Enter the start date for the time period you want to see a victory total for: ")
+      end_ct_date = input("Enter the end date for the time period you want to see a victory total for: ")
+      values = (begin_ct_date, end_ct_date)
+      cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date BETWEEN ? AND ?", values)
+      victory_tot = cursor.fetchone()[0]
+      print() # Add empty line before output
+      print(Fore.MAGENTA + f"{begin_ct_date} to {end_ct_date} Total Victory Count: " + Fore.YELLOW + f"\033[4m {victory_tot} \033[0m" + Style.RESET_ALL)
+    if option == 3:#MIN, MAX, AVG FOR RANGE##################################################################################
+      begin_calc_date = input("Enter the start date for the time period you want to see a victory low, high, & average for: ")
+      end_calc_date = input("Enter the end date for the time period you want to see a victory low, high, & average for: ")
+      values = (begin_calc_date, end_calc_date)
+      cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date BETWEEN ? AND ?", values)
+      victory_low = cursor.fetchone()[0]
+      victory_high = ""
+      victory_ave = ""
       cursor.execute("""
-                        SELECT 
-                          v.v_date,
-                          m.month,
-                          d.full_day,
-                          w.week_of_month,
-                          v.number,
-                          v.victory
-                        FROM victories v
-                        LEFT JOIN time_labels d
-                          ON d.day_number = CAST(strftime('%w', v.v_date) AS INTEGER)
-                        LEFT JOIN time_labels m
-                          ON m.month_number = CAST(strftime('%m', v.v_date) AS INTEGER)
-                        LEFT JOIN time_labels w
-                          ON w.week_number = v.week_number                        
-                        WHERE v_date >= ? AND v_date <= ?
-                      """, values)
-      print()
-      for line in cursor.fetchall():
-        # Unpack the tuple into separate variables instead of using indexing like line[0]
-        date_str, month, day, week_of_month, number, victory = line
-        # Build the composite column for the (month - week # - day) section
-        date_info = f"({month} - {week_of_month} - {day})"      
-        print(f"{date_str:<12} {date_info:<30}  {number:<3}  {victory}")
+                      SELECT
+                        MIN(daily_count),
+                        MAX(daily_count),
+                        AVG(daily_count)
+                      FROM (
+                        SELECT v_date, COUNT(*) AS daily_count
+                        FROM victories
+                        WHERE v_date BETWEEN ? AND ?
+                        GROUP BY v_date
+                      )
+                    """, (begin_calc_date, end_calc_date))
+
+      victory_low, victory_high, victory_ave = cursor.fetchone()
+      print() # Add empty line before output
+      print(Fore.MAGENTA + f"{begin_calc_date} to {end_calc_date} Victory \033[4mLow\033[0m, " + Fore.MAGENTA + f"\033[4mHigh\033[0m, " + Fore.MAGENTA + f"\033[4mAverage\033[0m: " + Fore.YELLOW + f"\033[4m {victory_low} \033[0m , " + Fore.YELLOW + f"\033[4m {victory_high} \033[0m , " + Fore.YELLOW + f"\033[4m {victory_ave} \033[0m" + Style.RESET_ALL)
 # CODE to EXIT program
 print("Way to log your efforts! See you next victory! Goodbye.")
 connection.close()
