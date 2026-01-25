@@ -56,7 +56,42 @@ def validate_end_date(prompt: str, start_date: str, allow_default=True) -> str:
       print(f"ERROR! End date [{entered_date}] cannot be before the start date [{start_date}]. Please try again.")
       continue
     return entered_date
-    
+  
+# Ensures input is 1 or greater whole number
+def validate_number(prompt: str) -> int:
+  while True:
+    user_input = input(prompt).strip()
+    if not user_input.isdigit():
+      print("ERROR! Please enter a whole number (1 or greater).")
+      continue
+    number = int(user_input)
+    if number < 1:
+      print("ERROR! Number must be 1 or greater, please try again.")
+      continue
+    return number
+  
+# Ensures the user chooses a number from the menu
+def validate_menu_choice(prompt: str, min_value: int = 1, max_value: int = 7) -> int:
+  while True:
+    user_input = input(prompt).strip()
+    if not user_input.isdigit():
+      print(f"ERROR! Please enter a number from the menu ({min_value}-{max_value}).")
+      continue
+    number = int(user_input)
+    if not (min_value <= number <= max_value):
+      print(f"ERROR! Please enter a number from the menu ({min_value}-{max_value}).")
+      continue
+    return number
+
+# Ensures the user doesn't leave the victory input blank
+def validate_victory(prompt: str) -> str:
+  while True:
+    user_input = input(prompt).strip()
+    if user_input == "":
+      print("ERROR! You must enter a something for your victory. Please try again.")
+      continue
+    return user_input   
+     
 # Returns the week number of the month using the majority-of-days rule.
 def get_week_number(date_obj: datetime) -> int:
     """    
@@ -182,14 +217,14 @@ while choice != 7:
   print("5) Show selected victory or victories")
   print("6) Look up statistics")
   print("7) Exit")
-  choice = int(input("->  "))
+  choice = validate_menu_choice(("->  "))
   print("   ‾‾‾")
 
   """CODE to PERFORM selected ACTIONS"""
   #CODE to INSERT or add a victory
   if choice == 1: #INSERT#######################################################################################
     # Have user enter their victory
-    victory = input("Record your personal victory: ")
+    victory = validate_victory("Record your personal victory: ")
     # Have user enter a different date or use today's date
     entered_date = validate_date(f"Enter date YYYY-MM-DD or press enter for the default of today's date")
     # Compute the week_number the victory falls into
@@ -210,7 +245,7 @@ while choice != 7:
   # CODE to UPDATE or edit a victory
   elif choice == 2: #UPDATE########################################################################################
     e_date = validate_date("Enter the date YYYY-MM-DD of the victory to be edited or press enter for the default of today's date")
-    e_number = int(input("Enter the number of the victory to be edited: "))
+    e_number = validate_number("Enter the number of the victory to be edited: ")
     values = (e_date, e_number)
     cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
     result = cursor.fetchone() 
@@ -230,7 +265,7 @@ while choice != 7:
   # CODE to DELETE a victory
   elif choice == 3: #DELETE##########################################################################################
     d_date = validate_date("Enter the date YYYY-MM-DD of the victory to be removed or press enter for the default of today's date")
-    d_number = int(input("Enter the number of the victory to be removed: "))
+    d_number =validate_number("Enter the number of the victory to be removed: ")
     values = (d_date, d_number)
     cursor.execute("SELECT victory FROM victories WHERE v_date = ? AND number = ?", values)
     result = cursor.fetchone()
@@ -257,11 +292,11 @@ while choice != 7:
     print("   1) Show a single victory")
     print("   2) Show all victories for a day")
     print("   3) Show all victories for a range of dates")
-    selection = int(input("   ->  "))
+    selection = validate_menu_choice(("   ->  "), 1, 3)
     print("      ‾‾‾")
     if selection == 1:#SINGLE VICTORY#################################################################################
       s_date = validate_date("Enter the date YYYY-MM-DD of the victory you want to see or press enter for the default of today's date")
-      s_number = int(input("Enter the number of the victory you want to see: "))
+      s_number = validate_number("Enter the number of the victory you want to see: ")
       where_clause = "WHERE v.v_date = ? AND v.number = ?"
       values = (s_date, s_number)
       error_statement = f"The date [{s_date}] and number [{s_number}] do not correspond to an existing victory,"
@@ -289,7 +324,7 @@ while choice != 7:
     print("   1) Show total victory count for a day")
     print("   2) Show total victory count for a week, month, etc")
     print("   3) Show the lowest, highest, and average victory count for a range of dates")    
-    option = int(input("   ->  "))    
+    option = validate_menu_choice(("   ->  "), 1, 3)    
     if option == 1:#COUNT FOR DAY##################################################################################
       ct_date = validate_date("Enter the date YYYY-MM-DD you want to see a victory total for or press enter for the default of today's date")
       cursor.execute("SELECT COUNT(*) FROM victories WHERE v_date = ?", (ct_date,))
