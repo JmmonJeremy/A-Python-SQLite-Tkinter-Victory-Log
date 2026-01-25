@@ -3,7 +3,7 @@ This is Python program that captures a daily log of personal victories by date i
 
 ## Instructions for Build and Use
 
-[Software Demo](Put_Your_Video_Link_Here)
+[Software Demo](https://youtu.be/3KmU5W6ttFA)
 
 Steps to build and/or run the software:
 
