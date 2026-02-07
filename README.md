@@ -1,5 +1,5 @@
 # Python SQLite Victory Log
-This is Python program that captures a daily log of personal victories by date into an SQLite database. You can add victories, update victories, view all of the victories, view specific victories, view victories from a day or a date range and view statistics about victories
+This is Python program that captures a daily log of personal victories by date into an SQLite database. You can add victories, update victories, view all of the victories, view specific victories, view victories from a day or a date range and view statistics about victories.
 
 ## Instructions for Build and Use
 
