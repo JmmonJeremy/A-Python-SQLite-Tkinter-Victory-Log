@@ -41,7 +41,7 @@ I found these websites useful in developing this software:
 
 ### Visual Studio Code :
 * [Visual Studio Code & GitHub](https://code.visualstudio.com/docs/sourcecontrol/overview)
-* 
+  
 ### Python :
 * [Python 3.11.1 Reference Manual](https://docs.python.org/3.11/)
 * [Stack Overflow - How To Underline Text In Python 3.6.5](https://stackoverflow.com/questions/51001592/how-to-underline-text-in-python-3-6-5)
