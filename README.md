@@ -5,7 +5,7 @@ This is Python program that captures a daily log of personal victories by date i
 
 [Software Demo](https://youtu.be/3KmU5W6ttFA)
 
-Steps to build and/or run the software:
+#### Steps to build and/or run the software:
 
  1. Go to the official Python website https://www.python.org/downloads/ and click link to Download Python 3.10 or newer
  2. Then double-click the download installer, check the box that says Add Python to PATH, and click Install Now
@@ -16,7 +16,7 @@ Steps to build and/or run the software:
  7. Then to activate the virtual environment, thereby keeping it local, enter the command: .\venv\Scripts\Activate.ps1
  8. Then install colorama with the command: pip install colorama
 
-Instructions for using the software:
+#### Instructions for using the software:
 
 1. In VSCode go to the victory_log.py file in your project folder open the terminal at the bottom
 2. If you are not in the folder for your project in the terminal use the cd command to get there
